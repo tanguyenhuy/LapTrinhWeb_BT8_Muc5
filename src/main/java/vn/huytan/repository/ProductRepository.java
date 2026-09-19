@@ -8,7 +8,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import vn.huytan.entity.Product;
 
 public interface ProductRepository extends JpaRepository<Product, Long> {
-    List<Product> findByProductNameContaining(String name);
-    Page<Product> findByProductNameContaining(String name, Pageable pageable);
+
     Optional<Product> findByProductName(String name);
+
+    List<Product> findAllByOrderByUnitPriceAsc();
+    List<Product> findByCategory_CategoryId(Long categoryId);
+    Page<Product> findByProductNameContainingIgnoreCase(String keyword, Pageable pageable);
+    Page<Product> findByCategory_CategoryIdAndProductNameContainingIgnoreCase(Long categoryId, String keyword, Pageable pageable);
 }

@@ -15,4 +15,9 @@ public class ViewController {
     public String productAjax() {
         return "admin/product-ajax";
     }
+    
+    @GetMapping({"/", "/home"})
+    public String home() {
+        return "home";
+    }
 }

@@ -9,12 +9,32 @@
 </head>
 <body class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3 class="fw-bold text-primary"><i class="bi bi-tags me-2"></i>Quản lý Danh Mục</h3>
+        <h3 class="fw-bold text-primary"><i class="bi bi-tags me-2"></i>Quản lý Danh Mục (Category)</h3>
         <div>
+            <a href="/home" class="btn btn-outline-primary me-2"><i class="bi bi-house-door me-1"></i> Trang chủ</a>
             <a href="/admin/product-ajax" class="btn btn-outline-secondary me-2">Qua trang Sản phẩm</a>
             <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
                 <i class="bi bi-plus-circle me-1"></i> Thêm Category
             </button>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-body">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <input type="text" id="catKeyword" class="form-control" 
+					    placeholder="Nhập tên danh mục cần tìm..." 
+					    onkeyup="if(event.key === 'Enter') searchCategory(0);">
+                        <button class="btn btn-primary" onclick="searchCategory(0)"><i class="bi bi-search"></i> Tìm kiếm</button>
+                        <button class="btn btn-outline-secondary" onclick="resetSearchCategory()">Làm mới</button>
+                    </div>
+                </div>
+                <div class="col-md-6 text-end">
+                    <span class="badge bg-secondary fs-6" id="totalCats">0 danh mục</span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -29,11 +49,14 @@
                         <th style="width: 20%;" class="text-center">Thao tác</th>
                     </tr>
                 </thead>
-                <tbody>
-                </tbody>
+                <tbody></tbody>
             </table>
         </div>
     </div>
+
+    <nav class="mt-3" id="catPaginationNav" style="display: none;">
+        <ul class="pagination justify-content-center" id="catPagination"></ul>
+    </nav>
 
     <div class="modal fade" id="addCategoryModal" tabindex="-1">
         <div class="modal-dialog">
@@ -62,6 +85,7 @@
         </div>
     </div>
 
+    <!-- Modal Sửa Category -->
     <div class="modal fade" id="editCategoryModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -92,39 +116,96 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function loadCategories() {
-            $.ajax({
-                url: '/api/category',
-                type: 'GET',
-                success: function(res) {
-                    let rows = '';
-                    if (res.status && res.body.length > 0) {
-                        res.body.forEach(cat => {
-                            let iconSrc = cat.icon ? '/uploads/' + cat.icon : 'https://placehold.co/60x60?text=No+Img';
-                            rows += `
-                                <tr>
-                                    <td class="fw-bold">${cat.categoryId}</td>
-                                    <td class="text-center">
-                                        <img src="${iconSrc}" class="rounded border" style="width: 50px; height: 50px; object-fit: cover;">
-                                    </td>
-                                    <td class="fw-semibold">${cat.categoryName}</td>
-                                    <td class="text-center">
-                                        <button class="btn btn-warning btn-sm me-1" onclick="openEditCategory(${cat.categoryId}, '${cat.categoryName}')">
-                                            <i class="bi bi-pencil"></i> Sửa
-                                        </button>
-                                        <button class="btn btn-danger btn-sm" onclick="deleteCategory(${cat.categoryId})">
-                                            <i class="bi bi-trash"></i> Xóa
-                                        </button>
-                                    </td>
-                                </tr>
-                            `;
-                        });
-                    } else {
-                        rows = '<tr><td colspan="4" class="text-center text-muted py-3">Chưa có danh mục nào.</td></tr>';
+        let currentCatPage = 0;
+        const CAT_PAGE_SIZE = 3;
+
+        function searchCategory(page = 0) {
+            currentCatPage = page;
+            let kw = $('#catKeyword').val().trim();
+
+            const query = `
+                query CatPage($keyword: String, $page: Int, $size: Int) {
+                    categoriesPage(keyword: $keyword, page: $page, size: $size) {
+                        content {
+                            categoryId
+                            categoryName
+                            icon
+                        }
+                        totalPages
+                        totalElements
+                        pageNumber
                     }
-                    $('#categoryTable tbody').html(rows);
+                }
+            `;
+
+            $.ajax({
+                url: '/graphql',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    query: query,
+                    variables: { keyword: kw, page: page, size: CAT_PAGE_SIZE }
+                }),
+                success: function(res) {
+                    if (res.data && res.data.categoriesPage) {
+                        let pageData = res.data.categoriesPage;
+                        renderCategoryRows(pageData.content);
+                        $('#totalCats').text(pageData.totalElements + " danh mục");
+                        renderCatPagination(pageData.totalPages, pageData.pageNumber);
+                    }
                 }
             });
+        }
+
+        function renderCategoryRows(categories) {
+            let rows = '';
+            if (categories && categories.length > 0) {
+                categories.forEach(cat => {
+                    let iconSrc = cat.icon ? '/uploads/' + cat.icon : 'https://placehold.co/60x60?text=No+Img';
+                    rows += `
+                        <tr>
+                            <td class="fw-bold">${cat.categoryId}</td>
+                            <td class="text-center">
+                                <img src="${iconSrc}" class="rounded border" style="width: 50px; height: 50px; object-fit: cover;">
+                            </td>
+                            <td class="fw-semibold">${cat.categoryName}</td>
+                            <td class="text-center">
+                                <button class="btn btn-warning btn-sm me-1" onclick="openEditCategory(${cat.categoryId}, '${cat.categoryName}')">
+                                    <i class="bi bi-pencil"></i> Sửa
+                                </button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteCategory(${cat.categoryId})">
+                                    <i class="bi bi-trash"></i> Xóa
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } else {
+                rows = '<tr><td colspan="4" class="text-center text-muted py-3">Không tìm thấy danh mục nào.</td></tr>';
+            }
+            $('#categoryTable tbody').html(rows);
+        }
+
+        function renderCatPagination(totalPages, activePage) {
+            if (totalPages <= 1) {
+                $('#catPaginationNav').hide();
+                return;
+            }
+            $('#catPaginationNav').show();
+            let html = '';
+            for (let i = 0; i < totalPages; i++) {
+                html += `
+                    <li class="page-item ${i === activePage ? 'active' : ''}">
+                        <a class="page-link" href="javascript:void(0)" onclick="searchCategory(${i})">${i + 1}</a>
+                    </li>
+                `;
+            }
+            $('#catPagination').html(html);
+        }
+
+        function resetSearchCategory() {
+            $('#catKeyword').val('');
+            searchCategory(0);
         }
 
         $('#addCategoryForm').submit(function(e) {
@@ -140,7 +221,7 @@
                     if (res.status) {
                         $('#addCategoryModal').modal('hide');
                         $('#addCategoryForm')[0].reset();
-                        loadCategories();
+                        searchCategory(currentCatPage);
                     } else {
                         alert(res.message);
                     }
@@ -168,14 +249,13 @@
                     if (res.status) {
                         $('#editCategoryModal').modal('hide');
                         $('#editCategoryForm')[0].reset();
-                        loadCategories();
+                        searchCategory(currentCatPage);
                     } else {
                         alert(res.message);
                     }
                 }
             });
         });
-
 
         function deleteCategory(id) {
             if (confirm('Bạn có chắc muốn xóa Category ID: ' + id + '?')) {
@@ -184,27 +264,20 @@
                     type: 'DELETE',
                     success: function(res) {
                         if (res.status) {
-                            alert('Đã xóa danh mục thành công!');
-                            loadCategories();
+                            searchCategory(currentCatPage);
                         } else {
-                            alert('Thất bại: ' + res.message);
+                            alert(res.message);
                         }
                     },
                     error: function(xhr) {
-                        let msg = 'Lỗi hệ thống khi xóa!';
-                        if (xhr.responseJSON && xhr.responseJSON.message) {
-                            msg = xhr.responseJSON.message;
-                        } else if (xhr.responseText) {
-                            msg = xhr.responseText;
-                        }
-                        alert(msg);
+                        alert(xhr.responseJSON ? xhr.responseJSON.message : 'Lỗi hệ thống khi xóa!');
                     }
                 });
             }
         }
 
         $(document).ready(function() {
-            loadCategories();
+            searchCategory(0);
         });
     </script>
 </body>
